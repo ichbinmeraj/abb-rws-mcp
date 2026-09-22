@@ -1,9 +1,25 @@
 abb-rws-mcp
 Copyright 2026 Meraj Safari
 
+MCP server for safe AI-agent access to ABB robot controllers over Robot Web Services.
+
 This product includes software developed by Meraj Safari
 (https://github.com/ichbinmeraj).
 
-This is an independent project. It is not affiliated with, endorsed by
-or sponsored by ABB. ABB, RobotWare, OmniCore, IRC5 and RobotStudio are
-trademarks of ABB.
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+ABB, IRC5, OmniCore, RobotWare, RobotStudio, RAPID and FlexPendant are
+trademarks of ABB Ltd. This project is not affiliated with, endorsed by, or
+supported by ABB Ltd. See TRADEMARKS.md.
+
+--------------------------------------------------------------------------
+Third-party components
+
+This project is in early development and does not yet redistribute any
+third-party component. When it does, each one will be listed here with its
+copyright and license, and this file must travel with any redistribution
+(Apache-2.0 section 4(d)).
