@@ -51,7 +51,8 @@ a hardware guarantee.
 
 ## Before you open a pull request
 
-- The server's offline tests must be green.
+- `npm run build`, `npm test` and `npm run lint` must be green. The tests run offline,
+  against a fake daemon.
 - Every new behaviour gets a test; existing tests stay green.
 - Protocol claims must cite evidence - the probe or controller and the date, and
   whether it was observed on a virtual controller (VC) or on real hardware.

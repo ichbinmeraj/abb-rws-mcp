@@ -1,0 +1,70 @@
+{
+  "name": "abb-rws-mcp",
+  "version": "0.1.0",
+  "description": "Read-only MCP server for ABB robot controllers. It reads through abb-rws-daemon on 127.0.0.1: RWS 1.0 (IRC5) and RWS 2.0 (OmniCore).",
+  "mcpName": "io.github.ichbinmeraj/abb-rws-mcp",
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Meraj Safari",
+    "url": "https://github.com/ichbinmeraj"
+  },
+  "homepage": "https://github.com/ichbinmeraj/abb-rws-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/ichbinmeraj/abb-rws-mcp/issues"
+  },
+  "keywords": [
+    "abb",
+    "robot",
+    "rws",
+    "robot-web-services",
+    "irc5",
+    "omnicore",
+    "robotware",
+    "robotstudio",
+    "industrial-robot",
+    "mcp",
+    "model-context-protocol"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ichbinmeraj/abb-rws-mcp.git"
+  },
+  "type": "module",
+  "bin": {
+    "abb-rws-mcp": "dist/cli.js"
+  },
+  "files": [
+    "dist/cli.js",
+    "LICENSE",
+    "NOTICE",
+    "THIRD_PARTY_NOTICES.md",
+    "TRADEMARKS.md",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc --noEmit && node scripts/bundle.mjs",
+    "typecheck": "tsc --noEmit",
+    "bundle": "node scripts/bundle.mjs",
+    "notices": "node scripts/notices.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src",
+    "prepack": "npm run build && npm test"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "@types/node": "20.19.43",
+    "@typescript-eslint/eslint-plugin": "8.71.1",
+    "@typescript-eslint/parser": "8.71.1",
+    "ajv": "8.20.0",
+    "esbuild": "0.28.2",
+    "eslint": "10.12.0",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11",
+    "zod": "4.6.7"
+  }
+}

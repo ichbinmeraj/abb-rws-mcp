@@ -1,0 +1,21 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.ichbinmeraj/abb-rws-mcp",
+  "title": "abb-rws-mcp",
+  "description": "Read-only MCP server for ABB robot controllers, through abb-rws-daemon on 127.0.0.1.",
+  "repository": {
+    "url": "https://github.com/ichbinmeraj/abb-rws-mcp",
+    "source": "github"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "abb-rws-mcp",
+      "version": "0.1.0",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+# Sources, tests and the copied daemon schema stay LF in every checkout, whatever
+# core.autocrlf says: the schema copy is pinned by its sha256 over LF text, and
+# the bundle starts with a "#!" line that only works with LF.
+* text=auto eol=lf
+*.json text eol=lf
+*.mjs text eol=lf

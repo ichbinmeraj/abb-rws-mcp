@@ -1,0 +1,36 @@
+# Builds and tests the server on Linux, on every supported Node.js version.
+#
+# The tests run offline against a fake daemon: no daemon and no controller is
+# reached. The idle check runs the full 60 s here. The last step packs the
+# tarball, installs it globally and runs the command: the proof that the
+# installed bin starts. Nothing is published.
+name: CI
+on:
+  push:
+    branches: [master, "release/**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+permissions: { contents: read }
+concurrency: { group: "ci-${{ github.ref }}", cancel-in-progress: true }
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy: { fail-fast: false, matrix: { node: [20, 22, 24] } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "${{ matrix.node }}", cache: npm }
+      - run: npm ci --ignore-scripts
+      - run: npm run typecheck
+      - run: node scripts/bundle.mjs
+      - run: npm test
+        env: { ABB_RWS_MCP_IDLE_TEST_S: "60" }
+      - run: npm run lint
+      - run: node scripts/notices.mjs --check
+      - run: node dist/cli.js --version && node dist/cli.js --help
+      - run: |
+          npm pack --ignore-scripts
+          npm install -g ./abb-rws-mcp-*.tgz
+          abb-rws-mcp --version
