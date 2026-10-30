@@ -260,7 +260,8 @@ export function stoppedCell(now = Date.now()): { snap: Json; events: Json[] } {
     event(now, { seq: 3, code: 50024, severity: 'warning', title: 'Corner path failure', ageS: 7200, actions: 'Check the zone data.' }),
     event(now, { seq: 4, code: 41000, severity: 'error', title: 'Synthetic RAPID error: WaitDI timed out', ageS: 40,
       description: 'The task stopped at a WaitDI that timed out. The input did not reach the value in time.',
-      causes: 'The input stayed at 0.', actions: 'Check the part sensor and the signal diPartPresent. Then restart the program.' }),
+      causes: 'The input stayed at 0.', actions: 'Check the part sensor and the signal diPartPresent. Then restart the program.',
+      args: [{ type: 'string', value: 'T_ROB1' }, { type: 'string', value: '/MainModule/pick/WaitDI/9' }] }),
     event(now, { seq: 5, code: 10002, severity: 'info', title: 'Program stopped', ageS: 39 }),
   ];
   return { snap: snapshot({ now, events, execState: 'stopped' }), events };

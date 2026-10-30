@@ -1,8 +1,9 @@
 # Releasing abb-rws-mcp
 
-How a version of abb-rws-mcp gets to npm and to the MCP Registry. The steps are
-written for 0.1.0; a later version follows them with its own numbers. The commands
-are for PowerShell on Windows. Run them in the repository's folder.
+How a version of abb-rws-mcp gets to npm and to the MCP Registry. The steps use 0.1.0
+as the example, and a later version follows them with its own numbers. From 0.2.0 on, a
+tag publishes through the release workflow (steps 6 and 7). The commands are for
+PowerShell on Windows. Run them in the repository's folder.
 
 ## Before step 1
 
@@ -59,7 +60,15 @@ are for PowerShell on Windows. Run them in the repository's folder.
    git push origin v0.1.0
    ```
 
-6. **Publish to npm.**
+6. **Publish to npm.** The tag starts `.github/workflows/release.yml`.
+   - Its `package` job builds and tests the tagged commit on a clean runner, packs the
+     tarball and shows the tarball's sha256 in the run summary.
+   - Its `publish` job waits in the `npm` environment until the owner approves it. Before
+     approving, download the run's `package` artifact and compare its checksums.
+   - It then publishes that same file with `--provenance` through npm trusted publishing.
+     No npm token is stored anywhere.
+
+   By hand, only if the workflow cannot run:
 
    ```powershell
    npm publish --access public
@@ -68,7 +77,9 @@ are for PowerShell on Windows. Run them in the repository's folder.
    `prepack` builds and tests again.
 
 7. **List it in the MCP Registry.** The registry reads `mcpName` from the version
-   npm now has, so this step comes after step 6. With
+   npm now has, so this step comes after step 6. The workflow's `registry` job does it
+   after the publish, logged in with the run's GitHub identity, and it can be run again
+   alone. By hand, with
    [mcp-publisher](https://github.com/modelcontextprotocol/registry) installed:
 
    ```powershell

@@ -1,6 +1,6 @@
 {
   "name": "abb-rws-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Read-only MCP server for ABB robot controllers. It reads through abb-rws-daemon on 127.0.0.1: RWS 1.0 (IRC5) and RWS 2.0 (OmniCore).",
   "mcpName": "io.github.ichbinmeraj/abb-rws-mcp",
   "license": "Apache-2.0",

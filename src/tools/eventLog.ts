@@ -98,7 +98,7 @@ export async function getEventLog(ctx: Context, args: Args): Promise<ReturnType<
 
   const rs = reasons(snap, ['events']);
   const build = (list: typeof chosen, truncated: boolean): { out: z.infer<typeof OUTPUT>; text: string } => {
-    const events = list.map(e => eventOut(e, now, detail));
+    const events = list.map(e => eventOut(e, now, detail, ctx.config.markCodes ?? null));
     const out = {
       ...common,
       feed: FEED.test(page.feed) ? page.feed : null,

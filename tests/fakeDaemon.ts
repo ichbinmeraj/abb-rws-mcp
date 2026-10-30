@@ -21,7 +21,7 @@ export class FakeDaemon {
   server: http.Server;
   port = 0;
   token = 'fake-token-0123456789-abcdefghijklmnopqrstuvwxyz';
-  schemaVersion = '0.14';
+  schemaVersion = '0.15';
   health: Json = healthFixture();
   controllers = new Map<string, Json>();
   events = new Map<string, Json[]>();
@@ -30,6 +30,11 @@ export class FakeDaemon {
   search?: (id: string, query: URLSearchParams) => Json[];
   /** Module texts by `${id}/${task}/${module}`. */
   modules = new Map<string, string>();
+  /**
+   * RAPID values by `${id}/${task}/${module}/${symbol}`: the value text, or an error answer
+   * `{ status, body }`. A symbol not in the map answers as the daemon does for an unknown one.
+   */
+  values = new Map<string, string | { status: number; body: Json }>();
   log: Received[] = [];
   overrides: Override[] = [];
   /** Lease ids handed out. */
@@ -125,6 +130,28 @@ export class FakeDaemon {
         return (!name || s.name.toLowerCase().startsWith(name.toLowerCase())) && (!type || s.type === type);
       });
       this.send(res, 200, { signals: found });
+      return;
+    }
+    const sym = /^\/rapid\/tasks\/([^/]+)\/modules\/([^/]+)\/symbols\/([^/]+)$/.exec(rest);
+    if (r.method === 'GET' && sym) {
+      // Daemon 0.1.0 (schema 0.14) has no such route.
+      if (Number(this.schemaVersion.split('.')[1]) < 15) { this.send(res, 404, { error: `no route: GET ${r.url}`, code: 'NO_ROUTE' }); return; }
+      const [task, module, symbol] = [sym[1], sym[2], sym[3]].map(decodeURIComponent);
+      const v = this.values.get(`${id}/${task}/${module}/${symbol}`);
+      if (v === undefined) {
+        this.send(res, 404, {
+          error: 'Resource does not exist on the controller', code: 'RESOURCE_NOT_FOUND',
+          controller: { httpStatus: 404, code: -1073442816, message: null },
+        });
+        return;
+      }
+      if (typeof v !== 'string') { this.send(res, v.status, v.body); return; }
+      const generation = snap.identity?.robotWare?.generation;
+      this.send(res, 200, {
+        task, module, symbol, value: v.slice(0, 16384), truncated: v.length > 16384,
+        resource: generation === 'rws1' ? '/rw/rapid/symbol/data/RAPID/{task}/{module}/{symbol}' : '/rw/rapid/symbol/RAPID/{task}/{module}/{symbol}/data',
+        readAt: iso(Date.now()),
+      });
       return;
     }
     const mod = /^\/rapid\/tasks\/([^/]+)\/modules\/([^/]+)$/.exec(rest);

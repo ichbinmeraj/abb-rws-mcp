@@ -5,7 +5,7 @@ import type { Context, Ready } from '../context.js';
 import { ID_PATTERN, ToolError, errors } from '../errors.js';
 import { mask } from '../log.js';
 import { errorBody, type Answer } from '../daemon.js';
-import { GROUP_STATES, LEVELS, NOTE, block, groupsLine, newNonce, renderData, source, status, type Source } from '../render.js';
+import { GROUP_STATES, LEVELS, NOTE, ageS, block, groupsLine, isReplay, newNonce, renderData, source, status, validTime, type Source } from '../render.js';
 import { fieldPath, type Snapshot } from '../schema.js';
 
 /** The common part of every controller-scoped result. */
@@ -89,6 +89,80 @@ export function header(s: Scoped, groups: readonly string[]): { common: z.infer<
   if (groupLine) { lines.push(groupLine); }
   if (src.recording.active) { lines.push('The daemon is recording: the reads of this call are in its recording.'); }
   return { common, src, lines };
+}
+
+/**
+ * Where a value came from: which controller (the daemon's id for it, which the
+ * daemon may have made from the system name), what kind and which RobotWare,
+ * when the daemon had the value, by which way, and the RWS resource the
+ * daemon's client reads for it. The resource is a template from a fixed table,
+ * `{task}` and the like left as placeholders: nothing in it is text the
+ * controller sent. While the daemon replays, the way is always 'recording'.
+ */
+export const ProvenanceSchema = z.object({
+  controller: z.string(),
+  virtual: z.boolean().nullable(),
+  robotWare: z.string().nullable(),
+  readAt: z.string().nullable(),
+  ageS: z.number().nullable(),
+  via: z.enum(['snapshot', 'controller', 'cache', 'recording']),
+  resource: z.string(),
+});
+export type Provenance = z.infer<typeof ProvenanceSchema>;
+
+/** The RWS resources the daemon's client reads, per protocol generation (the client's path table). */
+export const RESOURCES = {
+  moduleText: {
+    rws1: '/rw/rapid/modules/{module}?resource=module-text&task={task}',
+    rws2: '/rw/rapid/tasks/{task}/modules/{module}/text',
+  },
+  eventLog: { rws1: '/rw/elog/0', rws2: '/rw/elog/0' },
+  /** abb-rws-daemon 0.1.1's RAPID_VALUE_RESOURCE. */
+  symbolValue: {
+    rws1: '/rw/rapid/symbol/data/RAPID/{task}/{module}/{symbol}',
+    rws2: '/rw/rapid/symbol/RAPID/{task}/{module}/{symbol}/data',
+  },
+} as const;
+
+const ROBOTWARE_RAW = /^[0-9][0-9A-Za-z.+-]{0,39}$/;
+const KNOWN_RESOURCES: ReadonlySet<string> = new Set(Object.values(RESOURCES).flatMap(t => Object.values(t)));
+
+/** Whether the daemon replays a recording for this scope. */
+export function replaying(s: Scoped): boolean {
+  return isReplay(s.snap, s.ready.health);
+}
+
+/** The protocol generation of the snapshot's identity, or null when it is not one of the two. */
+export function generationOf(snap: Snapshot): 'rws1' | 'rws2' | null {
+  const g = snap.identity?.robotWare.generation;
+  return g === 'rws1' || g === 'rws2' ? g : null;
+}
+
+/**
+ * A provenance object. `resource` must be one of the templates of RESOURCES, word for word;
+ * anything else reads 'unknown'. While the daemon replays, `via` is 'recording' whatever the caller says.
+ */
+export function provenance(s: Scoped, via: Provenance['via'], resource: string | null, readAt: string | null): Provenance {
+  const id = s.snap.identity;
+  const raw = id?.robotWare.raw ?? null;
+  const at = validTime(readAt);
+  return {
+    controller: s.id,
+    virtual: id?.virtual ?? null,
+    robotWare: raw !== null && ROBOTWARE_RAW.test(raw) ? raw : null,
+    readAt: at,
+    ageS: ageS(at, s.now),
+    via: replaying(s) ? 'recording' : via,
+    resource: resource !== null && KNOWN_RESOURCES.has(resource) ? resource : 'unknown',
+  };
+}
+
+/** One line for the text: where the value came from. */
+export function provenanceLine(p: Provenance): string {
+  const kind = p.virtual === true ? 'a virtual controller' : p.virtual === false ? 'a real controller' : 'a controller of unknown kind';
+  const from = p.via === 'controller' ? 'read from the controller' : p.via === 'cache' ? "from this server's cache"
+    : p.via === 'recording' ? 'from a recording the daemon replays' : "from the daemon's snapshot";
+  return `Provenance: ${p.controller}, ${kind}, RobotWare ${p.robotWare ?? 'not known'}; ${from}, resource ${p.resource}.`;
 }
 
 /**

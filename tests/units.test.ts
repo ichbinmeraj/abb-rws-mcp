@@ -18,7 +18,7 @@ describe('options and variables', () => {
     const p = parseArgs([], env, 'linux');
     expect(p).toEqual({ kind: 'run', config: {
       port: 7810, hostHeader: '127.0.0.1:7810', tokenFile: '/home/x/.cfg/abb-rws-daemon/token',
-      allowReplay: false, motionSampling: true, logLevel: 'warn',
+      allowReplay: false, motionSampling: true, logLevel: 'warn', markCodesFile: null,
     } });
     expect(defaultTokenPath(env, 'win32')).toBe('C:\\Users\\x\\AppData\\Roaming\\abb-rws-daemon\\token');
     expect(defaultTokenPath({}, 'linux', () => '/home/y')).toBe('/home/y/.config/abb-rws-daemon/token');
@@ -173,7 +173,8 @@ describe('meanings, categories, times, schema, version', () => {
   it('schema versions', () => {
     expect(schemaStatus('0.13')).toBe('tested');
     expect(schemaStatus('0.14')).toBe('tested');
-    expect(schemaStatus('0.15')).toBe('untested-newer');
+    expect(schemaStatus('0.15')).toBe('tested');
+    expect(schemaStatus('0.16')).toBe('untested-newer');
     expect(schemaStatus('0.12')).toBe('unsupported');
     expect(schemaStatus('1.0')).toBe('unsupported');
     expect(schemaStatus('x')).toBe('unsupported');

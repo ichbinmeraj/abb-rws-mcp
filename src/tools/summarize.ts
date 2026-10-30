@@ -49,6 +49,8 @@ export const OUTPUT = z.object({
   }),
   windowMinutes: z.number(),
   olderProblems: z.number(),
+  /** The feed the events' seqs belong to: explain_event takes a seq only with it. */
+  feed: z.string().nullable(),
   notes: z.array(z.string()),
   controllerData: z.object({
     panel: z.object({
@@ -222,8 +224,8 @@ export async function summarizeController(ctx: Context, args: { controller?: str
   };
 
   const rs = reasons(snap, ['panel', 'rapid', 'events']);
-  const problemsOut = problems.map(e => eventOut(e, now, 'summary'));
-  const timelineOut = timeline.map(e => eventOut(e, now, 'summary'));
+  const problemsOut = problems.map(e => eventOut(e, now, 'summary', ctx.config.markCodes ?? null));
+  const timelineOut = timeline.map(e => eventOut(e, now, 'summary', ctx.config.markCodes ?? null));
   const controllerData = cleanDeep({
     panel: {
       ctrlState: snap.panel.ctrlState, opMode: snap.panel.opMode, speedRatio: snap.panel.speedRatio,
@@ -252,6 +254,7 @@ export async function summarizeController(ctx: Context, args: { controller?: str
     },
     windowMinutes,
     olderProblems: older,
+    feed: /^[A-Za-z0-9_-]{1,64}$/.test(page.feed) ? page.feed : null,
     notes,
     controllerData,
   };
@@ -282,6 +285,7 @@ export async function summarizeController(ctx: Context, args: { controller?: str
   const probText = problemsOut.length ? `problems (newest first):\n${problemsOut.map((e, i) => eventText(e, problems[i], now)).join('\n')}` : 'problems: none in the window';
   const tlText = timelineOut.length ? `state changes (newest first):\n${timelineOut.map((e, i) => eventText(e, timeline[i], now)).join('\n')}` : 'state changes: none recorded';
   const hasReasons = rs.freshnessReasons.length > 0 || rs.linkReason !== null || rs.groupReasons.length > 0;
+  t.push(`The event seqs below belong to feed ${out.feed ?? 'unknown'}: give the seq and the feed to explain_event.`);
   t.push(blockOf(s.nonce, reported, taskText || 'no tasks listed', probText, tlText, hasReasons ? dataText(rs, now) : ''));
   return ok(t.join('\n'), out);
 }

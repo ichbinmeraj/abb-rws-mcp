@@ -34,7 +34,7 @@ export const HEALTH_CACHE_MS = 10_000;
 export const EVENTS_PAGE_MAX = 256;
 const FILTER_MAX = 160;
 
-type Param = 'id' | 'task' | 'module';
+type Param = 'id' | 'task' | 'module' | 'symbol';
 type QuerySpec = { kind: 'int'; min: number; max: number } | { kind: 'text'; max: number };
 
 interface RouteSpec {
@@ -47,7 +47,7 @@ interface RouteSpec {
 
 const route = (template: string, params: readonly Param[], query: Record<string, QuerySpec>, token = true): RouteSpec => ({
   template,
-  pattern: new RegExp(`^${template.replace(/:(id|task|module)/g, '([^/?#]+)')}$`),
+  pattern: new RegExp(`^${template.replace(/:(id|task|module|symbol)/g, '([^/?#]+)')}$`),
   params,
   query,
   token,
@@ -70,6 +70,7 @@ export const ROUTES = {
     type: { kind: 'text', max: 16 },
   }),
   module: route('/v0/controllers/:id/rapid/tasks/:task/modules/:module', ['id', 'task', 'module'], {}),
+  symbol: route('/v0/controllers/:id/rapid/tasks/:task/modules/:module/symbols/:symbol', ['id', 'task', 'module', 'symbol'], {}),
 } as const satisfies Record<string, RouteSpec>;
 
 export type RouteName = keyof typeof ROUTES;
@@ -77,7 +78,7 @@ export type RouteName = keyof typeof ROUTES;
 /** The one POST: a motion watch lease. Its body is exactly `{ "leaseId": <id> }`. */
 export const MOTION_WATCH = route('/v0/controllers/:id/motion/watch', ['id'], {});
 
-const PARAM_PATTERN: Record<Param, RegExp> = { id: ID_PATTERN, task: RAPID_NAME, module: RAPID_NAME };
+const PARAM_PATTERN: Record<Param, RegExp> = { id: ID_PATTERN, task: RAPID_NAME, module: RAPID_NAME, symbol: RAPID_NAME };
 
 /** A request outside the table: a bug in this server, never sent. */
 export class RefusedRequestError extends Error {

@@ -49,6 +49,20 @@ describe('read-only, by the source', () => {
     }
   });
 
+  it('explain_event, read_rapid_variable and list_controllers never read the access group, a lock, a holder or a capability entry', () => {
+    // As the daemon's own source scan: the property reads, in any spelling, with comments left out.
+    const forbidden = [
+      /\.access\b/, /\[\s*['"`]access['"`]\s*\]/, /\{[^}]*\baccess\b[^}]*\}\s*=/, /\.locks\b/, /\.holder\b/, /\.rmmp\b/,
+      /\.remoteAccessEnabled\b/, /capabilities\s*\.\s*entries\b/, /\.entries\b/,
+    ];
+    for (const file of ['tools/explainEvent.ts', 'tools/rapidVariable.ts', 'tools/listControllers.ts']) {
+      const source = sources.find(s => s.file === file);
+      expect(source, file).toBeDefined();
+      const code = source!.text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+      for (const re of forbidden) { expect(re.test(code), `${file}: ${re}`).toBe(false); }
+    }
+  });
+
   it('the token goes only into its header, inside daemon.ts', () => {
     for (const { file, text } of sources) {
       if (/TOKEN_HEADER\]|x-abb-rws-token/.test(text)) { expect(file).toBe('daemon.ts'); }

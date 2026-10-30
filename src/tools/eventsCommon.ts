@@ -81,11 +81,24 @@ export const EventOut = z.object({
   consequences: z.string().nullable(),
   actions: z.string().nullable(),
   args: z.array(z.object({ type: z.string(), value: z.string() })),
+  marked: z.boolean().nullable(),
 });
 export type EventOut = z.infer<typeof EventOut>;
 
-/** One event for structuredContent, every controller string cleaned; `summary` keeps the title, the first sentence and the actions. */
-export function eventOut(e: ControllerEvent, now: number, detail: 'full' | 'summary'): EventOut {
+/** The args of an event an answer shows; explain_event looks for a RAPID line in these only. */
+export const ARGS_SHOWN = 16;
+
+/** Whether an event's code is in the person's mark-codes list; null when no list was given. */
+export function markedBy(marks: ReadonlySet<number> | null | undefined, code: number | null): boolean | null {
+  if (!marks) { return null; }
+  return code !== null && marks.has(code);
+}
+
+/**
+ * One event for structuredContent, every controller string cleaned; `summary` keeps the title, the first sentence and the actions.
+ * `marks` is the person's mark-codes list (null: none given).
+ */
+export function eventOut(e: ControllerEvent, now: number, detail: 'full' | 'summary', marks: ReadonlySet<number> | null = null): EventOut {
   const sev = severityOf(e);
   const at = e.time.corrected ? validTime(e.time.utc) : validTime(e.time.utc);
   const full = detail === 'full';
@@ -108,13 +121,14 @@ export function eventOut(e: ControllerEvent, now: number, detail: 'full' | 'summ
     causes: full ? cleanOrNull(e.causes) : null,
     consequences: full ? cleanOrNull(e.consequences) : null,
     actions: keepText ? cleanOrNull(e.actions) : null,
-    args: e.args.slice(0, 16).map(a => ({ type: clean(a.type, 64), value: clean(a.value, 256) })),
+    args: e.args.slice(0, ARGS_SHOWN).map(a => ({ type: clean(a.type, 64), value: clean(a.value, 256) })),
+    marked: markedBy(marks, e.code),
   };
 }
 
 /** One event as text, for inside a block. Args appear only when the title was made from the code. */
 export function eventText(e: EventOut, raw: ControllerEvent, now: number): string {
-  const head = `- seq ${e.seq}, ${e.severity}, code ${e.code ?? 'none'}${e.category ? ` (${e.category})` : ''}: ${JSON.stringify(e.title)}`;
+  const head = `- seq ${e.seq}, ${e.severity}, code ${e.code ?? 'none'}${e.category ? ` (${e.category})` : ''}${e.marked ? ', MARKED' : ''}: ${JSON.stringify(e.title)}`;
   const lines = [head, `  at ${eventWhen(raw, now)}`];
   const add = (k: string, v: string | null): void => {
     if (v === null || v === '') { return; }

@@ -126,7 +126,7 @@ describe('daemon answers', () => {
     expect(text(await h.call('get_controller_status', {}))).toMatch(/^\[HOST_REFUSED\] /);
   });
 
-  it('schema 0.12, 1.0 and an unreadable one are refused, each saying which side to update; 0.13 reads as tested, 0.15 as untested-newer', async () => {
+  it('schema 0.12, 1.0 and an unreadable one are refused, each saying which side to update; 0.13 reads as tested, 0.16 as untested-newer', async () => {
     h = await cell();
     const cases: [string, string][] = [
       ['0.12', 'The daemon serves snapshot schema 0.12. This server needs abb-rws-daemon 0.1.0 or a later 0.x. Ask the person to update the daemon.'],
@@ -159,12 +159,12 @@ describe('daemon answers', () => {
     expect(structured(older).schema).toEqual({ version: '0.13', status: 'tested' });
     expect(text(older)).toContain('Snapshot schema 0.13, one this server was tested with.');
     expect(h.logLines.join('')).not.toContain('schema.untested-newer');
-    h.fake.schemaVersion = '0.15';
+    h.fake.schemaVersion = '0.16';
     h.ctx.daemon.invalidate();
     expect((await h.call('get_controller_status', {})).isError).toBeFalsy();
     const newer = await h.call('list_controllers', {});
     expect(structured(newer).schema.status).toBe('untested-newer');
-    expect(text(newer)).toContain('Snapshot schema 0.15 is newer than the newest one this server was tested with (0.14).');
+    expect(text(newer)).toContain('Snapshot schema 0.16 is newer than the newest one this server was tested with (0.15).');
     expect(h.logLines.join('')).toContain('schema.untested-newer');
   });
 
@@ -272,7 +272,7 @@ describe('list_controllers', () => {
     const r = await h.call('list_controllers', {});
     const s = structured(r);
     expect(s.daemon).toMatchObject({ reachable: true, version: '0.1.0', mode: 'live' });
-    expect(s.schema).toEqual({ version: '0.14', status: 'tested' });
+    expect(s.schema).toEqual({ version: '0.15', status: 'tested' });
     expect(s.token).toBe('ok');
     expect(s.controllers.map((c: { id: string }) => c.id)).toEqual(['cell-1', 'cell-2']);
     expect(s.controllers[1]).toMatchObject({ freshness: { level: 'down' }, identity: { virtual: false, robotWare: { major: 8, minor: 2 } } });

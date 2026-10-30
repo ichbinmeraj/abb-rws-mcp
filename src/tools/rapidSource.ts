@@ -4,7 +4,10 @@ import type { Context } from '../context.js';
 import { RAPID_NAME } from '../daemon.js';
 import { errors } from '../errors.js';
 import { ageS, fence, when } from '../render.js';
-import { ANNOTATIONS, DESCRIPTION_TAIL, blockOf, commonShape, controllerInput, header, ok, refreshed, scoped } from './common.js';
+import {
+  ANNOTATIONS, DESCRIPTION_TAIL, ProvenanceSchema, RESOURCES, blockOf, commonShape, controllerInput, generationOf, header, ok,
+  provenance, provenanceLine, refreshed, replaying, scoped,
+} from './common.js';
 import { declaredRoutines, readModule } from './moduleRead.js';
 
 export const NAME = 'read_rapid_source';
@@ -40,6 +43,7 @@ export const OUTPUT = z.object({
   readAt: z.string(),
   ageS: z.number(),
   fromCache: z.boolean(),
+  provenance: ProvenanceSchema,
   controllerData: z.object({ text: z.string() }),
 });
 
@@ -96,6 +100,9 @@ export async function readRapidSource(ctx: Context, args: Args): Promise<ReturnT
   else { to = Math.min(to, total); }
   const text = slice.join('\n');
   const readAtIso = new Date(mod.readAt).toISOString();
+  const gen = generationOf(s.snap);
+  // In a replay, readAt is when this server got the text from the daemon, not when it was recorded: none is given.
+  const prov = provenance(s, mod.fromCache ? 'cache' : 'controller', gen ? RESOURCES.moduleText[gen] : null, replaying(s) ? null : readAtIso);
 
   const out = {
     ...common,
@@ -110,6 +117,7 @@ export async function readRapidSource(ctx: Context, args: Args): Promise<ReturnT
     readAt: readAtIso,
     ageS: ageS(readAtIso, now) ?? 0,
     fromCache: mod.fromCache,
+    provenance: prov,
     controllerData: { text },
   };
 
@@ -118,6 +126,7 @@ export async function readRapidSource(ctx: Context, args: Args): Promise<ReturnT
     + `${truncated ? ' The answer was cut (at most 1,000 lines and 32 KiB per answer); ask for the next page.' : ''}`);
   t.push(`The text was read at ${when(readAtIso, now)}${mod.fromCache ? ', from this server\'s 60 s cache' : ''}. The module may have changed since;`
     + ` a later read with a different change count (now ${mod.changeCount ?? 'not reported'}) means it did. Line numbers match get_rapid_execution.`);
+  t.push(provenanceLine(prov));
   const width = String(Math.max(to, 1)).length;
   const numbered = slice.map((l, i) => `${String(from + i).padStart(width)}  ${l}`).join('\n');
   const f = fence(numbered);

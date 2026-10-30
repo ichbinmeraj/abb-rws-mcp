@@ -33,6 +33,7 @@ export interface HarnessOptions {
   requestDeadlineMs?: number;
   healthDeadlineMs?: number;
   now?: () => number;
+  markCodes?: ReadonlySet<number> | null;
 }
 
 export function tempDir(): string {
@@ -49,6 +50,7 @@ export async function harness(o: HarnessOptions = {}): Promise<Harness> {
   const config: Config = {
     port: fake.port, hostHeader: `127.0.0.1:${fake.port}`, tokenFile,
     allowReplay: o.allowReplay ?? false, motionSampling: o.motionSampling ?? true, logLevel: o.logLevel ?? 'debug',
+    markCodes: o.markCodes ?? null,
   };
   const daemon = new DaemonClient({
     port: fake.port, hostHeader: config.hostHeader, tokenFile, log,

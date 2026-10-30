@@ -1,12 +1,19 @@
 /** This server's name and version, as it reports them at `initialize` and to `--version`. */
 export const SERVER_NAME = 'abb-rws-mcp';
-export const SERVER_VERSION = '0.1.0';
+export const SERVER_VERSION = '0.2.0';
 
 /**
- * The daemon schema this release was tested against: 0.14, which abb-rws-daemon
- * 0.1.0 serves. A later 0.x is accepted with a warning.
+ * The daemon schema this release was tested against: 0.15, which abb-rws-daemon
+ * 0.1.1 serves. A later 0.x is accepted with a warning.
  */
-export const SCHEMA_TESTED = { major: 0, minor: 14 } as const;
+export const SCHEMA_TESTED = { major: 0, minor: 15 } as const;
+
+/**
+ * The first daemon schema with the RAPID value route: 0.15, abb-rws-daemon 0.1.1.
+ * read_rapid_variable refuses an older daemon before it sends anything; the
+ * other tools still read 0.13 and 0.14.
+ */
+export const SCHEMA_RAPID_VALUE = { major: 0, minor: 15 } as const;
 
 /**
  * The oldest daemon schema this server reads: 0.13, which only pre-release builds

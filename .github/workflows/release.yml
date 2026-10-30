@@ -1,0 +1,194 @@
+name: Release
+
+# Publishes a tagged release to npm through trusted publishing (OpenID Connect). No npm
+# token is stored anywhere. The npm side is a trusted publisher on the abb-rws-mcp package
+# that names this repository, this file (release.yml) and the environment "npm". The
+# environment holds the gate: Meraj as required reviewer, and deployments only from tags v*.
+#
+# Three jobs. "package" builds and tests the tagged commit the way CI does, packs the tarball
+# and uploads it with its sha1 and sha256. "publish" waits for the approval in the
+# environment, checks the sha256 again and publishes that uploaded file, not a new build.
+# Before approving, the owner can download the artifact and compare its checksums.
+# "registry" then lists the version in the MCP Registry with mcp-publisher, which logs in
+# with the same GitHub identity (OIDC) for the io.github.ichbinmeraj namespace. It is a job
+# of its own so that it can be run again alone: npm never takes the same version twice.
+#
+# Run it by hand (workflow_dispatch) with dry_run on to see the package job alone. Nothing
+# is published then.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Package and test only, publish nothing'
+        type: boolean
+        default: true
+
+# One release at a time. A second tag waits instead of racing the first.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  # The npm that publishes. Trusted publishing needs npm 11.5.1 or later and Node 22.14.0 or
+  # later. An exact version, never a range.
+  NPM_PUBLISH: 'npm@11.21.1'
+  # The mcp-publisher that lists the version, and the sha256 GitHub records for its Linux
+  # archive. An exact version, never latest.
+  MCP_PUBLISHER_VERSION: 'v1.8.1'
+  MCP_PUBLISHER_SHA256: 'a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc'
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      tarball: ${{ steps.pack.outputs.tarball }}
+      sha256: ${{ steps.pack.outputs.sha256 }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # A tag must be v plus the version in package.json, on master or on its release branch.
+      # A run by hand that would publish must start from a tag too.
+      - name: Guard the tag
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            [ "$GITHUB_REF_NAME" = "v$version" ] || { echo "tag $GITHUB_REF_NAME is not v$version from package.json"; exit 1; }
+            git merge-base --is-ancestor "$GITHUB_SHA" origin/master \
+              || git merge-base --is-ancestor "$GITHUB_SHA" "origin/release/$version" \
+              || { echo "$GITHUB_REF_NAME ($GITHUB_SHA) is on neither master nor release/$version"; exit 1; }
+          elif [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ "$DRY_RUN" != "true" ]; then
+            echo "a publish starts from a tag, and $GITHUB_REF_NAME is a branch: run it with dry_run on"; exit 1
+          fi
+          echo "version $version from $GITHUB_REF_NAME ($GITHUB_SHA)"
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+      - run: npm ci --ignore-scripts
+      - run: npm run typecheck
+      - run: node scripts/bundle.mjs
+      - run: npm test
+        env:
+          ABB_RWS_MCP_IDLE_TEST_S: '60'
+      - run: npm run lint
+      - run: node scripts/notices.mjs --check
+      # Built and tested above, so the pack skips prepack instead of doing both again.
+      - name: Pack
+        id: pack
+        run: |
+          npm pack --ignore-scripts --json > pack.json
+          tarball="$(node -p "require('./pack.json')[0].filename")"
+          shasum="$(node -p "require('./pack.json')[0].shasum")"
+          integrity="$(node -p "require('./pack.json')[0].integrity")"
+          [ -f "$tarball" ] || { echo "no $tarball"; exit 1; }
+          sha1="$(sha1sum "$tarball" | cut -d' ' -f1)"
+          sha256="$(sha256sum "$tarball" | cut -d' ' -f1)"
+          [ "$sha1" = "$shasum" ] || { echo "sha1 $sha1 is not npm's shasum $shasum"; exit 1; }
+          echo "tarball $tarball"
+          echo "shasum (sha1) $sha1"
+          echo "sha256 $sha256"
+          echo "integrity $integrity"
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+          echo "sha256=$sha256" >> "$GITHUB_OUTPUT"
+          {
+            echo "### $tarball"
+            echo "- commit: $GITHUB_SHA ($GITHUB_REF_NAME)"
+            echo "- size: $(stat -c %s "$tarball") bytes"
+            echo "- shasum (sha1): \`$sha1\`"
+            echo "- sha256: \`$sha256\`"
+            echo "- integrity: \`$integrity\`"
+            echo "- Before approving the npm environment, the owner can download the artifact \"package\" and compare these."
+          } >> "$GITHUB_STEP_SUMMARY"
+      # The proof that the installed command starts.
+      - run: |
+          npm install -g "./${{ steps.pack.outputs.tarball }}"
+          abb-rws-mcp --version
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package
+          path: ${{ steps.pack.outputs.tarball }}
+          if-no-files-found: error
+          retention-days: 30
+
+  publish:
+    needs: package
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Required reviewer (Meraj) and the tag rule live in this environment's settings.
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: 'https://registry.npmjs.org'
+      - uses: actions/download-artifact@v4
+        with:
+          name: package
+      # The file published is the file the package job uploaded.
+      - name: Same file as packaged
+        env:
+          TARBALL: ${{ needs.package.outputs.tarball }}
+          SHA256: ${{ needs.package.outputs.sha256 }}
+        run: echo "$SHA256  $TARBALL" | sha256sum -c -
+      - name: npm that can publish through OIDC
+        run: |
+          npm install -g "$NPM_PUBLISH"
+          node --version
+          npm --version
+      - name: Publish to npm (trusted publishing)
+        env:
+          TARBALL: ${{ needs.package.outputs.tarball }}
+        run: npm publish "./$TARBALL" --provenance --access public
+
+  registry:
+    needs: publish
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      # server.json must name the version npm now has.
+      - name: Same version as the tag
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          [ "$(node -p "require('./server.json').version")" = "$version" ] || { echo "server.json version is not $version"; exit 1; }
+          [ "$(node -p "require('./server.json').packages[0].version")" = "$version" ] || { echo "server.json package version is not $version"; exit 1; }
+      # The registry reads mcpName from the version on npm, so wait until npm serves it.
+      - name: Wait for the version on npm
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          for i in $(seq 1 18); do
+            if curl -sSf -o /dev/null "https://registry.npmjs.org/abb-rws-mcp/$version"; then echo "npm serves $version"; exit 0; fi
+            sleep 10
+          done
+          echo "npm does not serve abb-rws-mcp@$version after 3 minutes"; exit 1
+      - name: mcp-publisher, checked
+        run: |
+          archive="mcp-publisher_linux_amd64.tar.gz"
+          curl --fail --location --silent --show-error --output "$archive" \
+            "https://github.com/modelcontextprotocol/registry/releases/download/$MCP_PUBLISHER_VERSION/$archive"
+          echo "$MCP_PUBLISHER_SHA256  $archive" | sha256sum -c -
+          tar xzf "$archive" mcp-publisher
+          rm -f "$archive"
+          ./mcp-publisher --version
+      - name: List in the MCP Registry
+        run: |
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish

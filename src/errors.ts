@@ -5,13 +5,14 @@
  * carries a command, a variable name or a path to run or set.
  */
 
-import { SCHEMA_OLDEST, SCHEMA_TESTED } from './version.js';
+import { SCHEMA_OLDEST, SCHEMA_RAPID_VALUE, SCHEMA_TESTED } from './version.js';
 
 export type ErrorCode =
   | 'DAEMON_UNREACHABLE' | 'NOT_A_DAEMON' | 'TOKEN_UNREADABLE' | 'TOKEN_REFUSED' | 'HOST_REFUSED'
   | 'SCHEMA_UNSUPPORTED' | 'REPLAY_REFUSED' | 'UNKNOWN_CONTROLLER' | 'CONTROLLER_REQUIRED' | 'WRONG_CONTROLLER'
   | 'NOT_READY' | 'BUSY' | 'SEARCH_TOO_WIDE' | 'NOT_FOUND' | 'CONTROLLER_UNAVAILABLE' | 'CONTROLLER_ERROR'
-  | 'DAEMON_ERROR' | 'UNEXPECTED_ANSWER' | 'INTERNAL_ERROR';
+  | 'DAEMON_ERROR' | 'UNEXPECTED_ANSWER' | 'INTERNAL_ERROR'
+  | 'SYMBOL_NOT_FOUND' | 'VALUE_NOT_READ' | 'DAEMON_TOO_OLD' | 'FEED_CHANGED' | 'FEED_NEEDED';
 
 /** A daemon id as the daemon makes them (its ID_PATTERN): safe to show in fixed text. */
 export const ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,62}$/;
@@ -131,4 +132,19 @@ export const errors = {
     "The daemon's answer is larger than 16 MiB and was not read."),
   internal: (): ToolError => new ToolError('INTERNAL_ERROR',
     'This server hit an internal error. Details are in its log.'),
+  symbolNotFound: (data: unknown): ToolError => new ToolError('SYMBOL_NOT_FOUND',
+    'The controller does not know that task, module or symbol. It does not say which of the three is missing.'
+      + (data !== undefined ? ' What it answered follows, in a block.' : ''), data),
+  valueNotRead: (): ToolError => new ToolError('VALUE_NOT_READ',
+    'The controller answered the read with no value. It does so for an array over its read limit and for a type with no printable value. No value is shown.'),
+  daemonTooOld: (reported: string | null): ToolError => new ToolError('DAEMON_TOO_OLD',
+    `This tool needs abb-rws-daemon 0.1.1 or later (snapshot schema ${SCHEMA_RAPID_VALUE.major}.${SCHEMA_RAPID_VALUE.minor}).`
+      + `${reported && /^[0-9]{1,4}\.[0-9]{1,4}$/.test(reported) ? ` The daemon serves ${reported}.` : ''} Ask the person to update the daemon. The other tools still work.`),
+  recordingTooOld: (reported: string | null): ToolError => new ToolError('NOT_FOUND',
+    `The daemon replays a recording made before RAPID values were recorded${reported && /^[0-9]{1,4}\.[0-9]{1,4}$/.test(reported) ? ` (snapshot schema ${reported})` : ''},`
+      + ' so this tool has nothing to read from it. The other tools still work.'),
+  feedNeeded: (): ToolError => new ToolError('FEED_NEEDED',
+    'A seq is only known together with its feed: give the feed from the same get_event_log or summarize_controller answer, or name the event by code.'),
+  feedChanged: (): ToolError => new ToolError('FEED_CHANGED',
+    'The event numbering started over (the daemon restarted or the controller was added again). Call get_event_log again for a current seq.'),
 };

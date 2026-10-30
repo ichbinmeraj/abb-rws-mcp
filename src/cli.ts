@@ -1,10 +1,11 @@
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { ConfigError, USAGE, parseArgs, type Config } from './config.js';
+import { ConfigError, USAGE, parseArgs, parseCodeList, type Config } from './config.js';
 import { Context } from './context.js';
 import { DaemonClient } from './daemon.js';
 import { SCHEMA_RANGE_LOG, SchemaError, ToolError } from './errors.js';
 import { createLogger, installStderrMask, type Logger } from './log.js';
 import { createServer } from './server.js';
+import { readListFile, TokenFileError } from './token.js';
 import { SCHEMA_OLDEST, SCHEMA_TESTED, SDK_VERSION, SERVER_NAME, SERVER_VERSION } from './version.js';
 
 /**
@@ -73,7 +74,18 @@ export async function main(argv: readonly string[]): Promise<void> {
   }
   if (parsed.kind === 'help') { process.stdout.write(USAGE); return; }
   if (parsed.kind === 'version') { process.stdout.write(`${versionText()}\n`); return; }
-  await run(parsed.config);
+  let config = parsed.config;
+  if (config.markCodesFile) {
+    // Read and checked before any MCP message; the path never goes into the line.
+    try {
+      config = { ...config, markCodes: parseCodeList(await readListFile(config.markCodesFile)) };
+    } catch (e) {
+      const msg = e instanceof ConfigError ? e.message : `the mark-codes file could not be read (${e instanceof TokenFileError ? e.reason : 'unreadable'})`;
+      process.stderr.write(`abb-rws-mcp: ${msg}\n`);
+      process.exit(1);
+    }
+  }
+  await run(config);
 }
 
 main(process.argv.slice(2)).catch(e => {

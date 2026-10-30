@@ -21,6 +21,10 @@ export interface Config {
   allowReplay: boolean;
   motionSampling: boolean;
   logLevel: LogLevel;
+  /** The mark-codes file named by --mark-codes, read at start (cli.ts); null when none was given. */
+  markCodesFile?: string | null;
+  /** Event codes whose events are marked (`marked: true`), from that file; null when none was given. */
+  markCodes?: ReadonlySet<number> | null;
 }
 
 export type ParsedArgs =
@@ -36,6 +40,7 @@ export const ENV = {
   allowReplay: 'ABB_RWS_MCP_ALLOW_REPLAY',
   motionSampling: 'ABB_RWS_MCP_MOTION_SAMPLING',
   log: 'ABB_RWS_MCP_LOG',
+  markCodes: 'ABB_RWS_MCP_MARK_CODES',
 } as const;
 
 export const USAGE = `abb-rws-mcp: a read-only MCP server (stdio) for ABB robot controllers,
@@ -53,6 +58,11 @@ Options:
                               Off by default. Every answer is then labelled REPLAY.
   --motion-sampling <on|off>  Let get_robot_position ask the daemon to sample joint
                               positions for 15 s (${ENV.motionSampling}). Default on.
+  --mark-codes <file>         Event codes, one per line (# starts a comment), whose
+                              events get_event_log, explain_event and
+                              summarize_controller mark with marked: true, to find
+                              them before an answer is shared (${ENV.markCodes}).
+                              Off by default: events then say marked: null.
   --help                      Print this text and exit.
   --version                   Print the versions and exit.
 
@@ -110,11 +120,28 @@ function parseOnOff(name: string, raw: string): boolean {
   throw new ConfigError(`${name} must be on or off`);
 }
 
+/** The most codes a mark-codes file may list. */
+export const MARK_CODES_MAX = 10_000;
+
+/** A mark-codes file: one event code per line, `#` to the end of a line is a comment, blank lines skipped. */
+export function parseCodeList(text: string): Set<number> {
+  const codes = new Set<number>();
+  const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].replace(/#.*$/, '').trim();
+    if (line === '') { continue; }
+    if (!/^[0-9]{1,7}$/.test(line)) { throw new ConfigError(`line ${i + 1} of the mark-codes file is not an event code`); }
+    codes.add(Number(line));
+    if (codes.size > MARK_CODES_MAX) { throw new ConfigError(`the mark-codes file lists more than ${MARK_CODES_MAX} codes`); }
+  }
+  return codes;
+}
+
 const nonEmpty = (v: string | undefined): string | undefined => (v === undefined || v.trim() === '' ? undefined : v);
 
 /** Parse the command line and the environment. Throws ConfigError on a bad value. */
 export function parseArgs(argv: readonly string[], env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform): ParsedArgs {
-  const opts: { daemonUrl?: string; tokenFile?: string; allowReplay?: boolean; motionSampling?: string } = {};
+  const opts: { daemonUrl?: string; tokenFile?: string; allowReplay?: boolean; motionSampling?: string; markCodes?: string } = {};
   const seen = new Set<string>();
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -140,6 +167,7 @@ export function parseArgs(argv: readonly string[], env: NodeJS.ProcessEnv = proc
         opts.allowReplay = true;
         break;
       case '--motion-sampling': opts.motionSampling = value(); break;
+      case '--mark-codes': opts.markCodes = value(); break;
       default: throw new ConfigError(`unknown option ${flag.length > 40 ? `${flag.slice(0, 40)}...` : flag} (see --help)`);
     }
   }
@@ -163,5 +191,9 @@ export function parseArgs(argv: readonly string[], env: NodeJS.ProcessEnv = proc
   const logLevel = (logRaw?.trim().toLowerCase() ?? 'warn') as LogLevel;
   if (!LOG_LEVELS.includes(logLevel)) { throw new ConfigError(`${ENV.log} must be one of ${LOG_LEVELS.join(', ')}`); }
 
-  return { kind: 'run', config: { port, hostHeader, tokenFile, allowReplay, motionSampling, logLevel } };
+  const markFile = opts.markCodes ?? nonEmpty(env[ENV.markCodes]);
+  if (markFile !== undefined && markFile.trim() === '') { throw new ConfigError('--mark-codes is empty'); }
+  const markCodesFile = markFile ?? null;
+
+  return { kind: 'run', config: { port, hostHeader, tokenFile, allowReplay, motionSampling, logLevel, markCodesFile } };
 }

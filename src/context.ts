@@ -30,6 +30,8 @@ export function schemaStatus(version: string): SchemaStatus {
 export interface Ready {
   health: Health;
   schema: SchemaStatus;
+  /** The schema version the daemon reported (`major.minor`, checked by schemaStatus). */
+  schemaVersion: string;
   /** The controller ids the daemon serves, those that match its id pattern. */
   ids: string[];
 }
@@ -78,7 +80,7 @@ export class Context {
     const c = this.schemaCache;
     if (c && c.health === health && this.now() - c.at < 10_000) {
       if (c.status === 'unsupported') { throw errors.schemaUnsupported(c.version, health.mode === 'replay'); }
-      return { health, schema: c.status, ids: c.ids };
+      return { health, schema: c.status, schemaVersion: c.version, ids: c.ids };
     }
     const ans = await this.daemon.get('controllers');
     if (ans.status !== 200) { throw answerError(ans); }
@@ -97,7 +99,7 @@ export class Context {
     }
     this.schemaCache = { health: this.daemon.cachedHealth() ?? health, at: this.now(), status, version: head.schemaVersion, ids };
     if (status === 'unsupported') { throw errors.schemaUnsupported(head.schemaVersion, health.mode === 'replay'); }
-    return { health, schema: status, ids };
+    return { health, schema: status, schemaVersion: head.schemaVersion, ids };
   }
 
   /** As readyWithoutReplayCheck, and REPLAY_REFUSED when the daemon replays and replay is not allowed. */

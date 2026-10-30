@@ -7,31 +7,34 @@ the one session per controller over Robot Web Services: RWS 1.0 (IRC5, RobotWare
 RWS 2.0 (OmniCore, RobotWare 7 and 8). This server opens no controller session and never
 sees controller credentials.
 
-> **Status:** 0.1.0. Read-only. Tested on 2026-10-25 through abb-rws-daemon 0.1.0
-> (snapshot schema 0.14), and on 2026-10-21 through a pre-release build of it (schema
-> 0.13), each time on three RobotStudio virtual controllers: RobotWare 6.16.03 (RWS 1.0),
-> 7.21.4 and 8.2.1 (RWS 2.0). Every tool and the prompt ran through an MCP client over
-> stdio, and every request the server sent the daemon was recorded: reads only, plus one
-> sampling request per controller when motion sampling was on. Not yet run against a real
-> controller. Changes are listed in [CHANGELOG.md](CHANGELOG.md).
+> **Status:** 0.2.0. Read-only. Tested on 2026-10-31 through abb-rws-daemon 0.1.1
+> (snapshot schema 0.15) on three RobotStudio virtual controllers: RobotWare 6.16.03
+> (RWS 1.0), 7.21.4 and 8.2.1 (RWS 2.0). Every tool and the prompt ran through an MCP
+> client over stdio, and every request the server sent the daemon was recorded: reads
+> only, plus one sampling request per controller when motion sampling was on. On all three,
+> `read_rapid_variable` gave a test string with an inner doubled quote and the characters
+> `& < >` exactly as the controller holds it. 0.1.0 was tested the same way through
+> abb-rws-daemon 0.1.0. Not yet run against a real controller. Changes are listed in
+> [CHANGELOG.md](CHANGELOG.md).
 
-**Read-only.** The server has 8 tools and 1 prompt. Every tool reads. None of them sets a
+**Read-only.** The server has 10 tools and 1 prompt. Every tool reads. None of them sets a
 signal, starts or stops a program, moves a program pointer, loads or edits a module,
 switches motors, changes the speed, or requests mastership or write access. There is no
 write tool behind a flag either. The server writes no file and starts no process. It calls
-only the daemon's read routes; the one request that is not a GET asks the daemon to sample
+only the daemon's read routes. The one request that is not a GET asks the daemon to sample
 joint positions for 15 s (see [Motion sampling](#motion-sampling)).
 
 ## Requirements
 
 - Node.js 20 or later, on Windows or Linux. macOS follows the Linux paths and is untested.
-- [abb-rws-daemon](https://github.com/ichbinmeraj/abb-rws-daemon) 0.1.0 or a later 0.x,
+- [abb-rws-daemon](https://github.com/ichbinmeraj/abb-rws-daemon) 0.1.1 or a later 0.x,
   running on the same PC, with at least one controller added. This server cannot add one.
-  It reads snapshot schema 0.13 or a later 0.x. It was tested with 0.14, which
-  abb-rws-daemon 0.1.0 serves, and with 0.13, which only pre-release builds of the daemon
-  served. It does not read the field 0.14 adds (whether a lock holder is the FlexPendant).
-  With a later 0.x it logs one warning that the schema is newer than the ones it was
-  tested with, and `list_controllers` says the same.
+  With abb-rws-daemon 0.1.0 every tool works but `read_rapid_variable`, which says the
+  daemon needs an update. The server reads snapshot schema 0.13 or a later 0.x. It was
+  tested with 0.15, which abb-rws-daemon 0.1.1 serves, and with 0.14 and 0.13 before. It
+  does not read the field 0.14 adds (whether a lock holder is the FlexPendant). With a
+  later 0.x it logs one warning that the schema is newer than the ones it was tested
+  with, and `list_controllers` says the same.
 - An MCP host that runs stdio servers: Claude Desktop, Claude Code, VS Code, Cursor or
   another.
 
@@ -45,7 +48,7 @@ Claude Desktop (`claude_desktop_config.json`) and Cursor (`~/.cursor/mcp.json`):
 ```json
 {
   "mcpServers": {
-    "abb-rws": { "command": "npx", "args": ["-y", "abb-rws-mcp@0.1.0"] }
+    "abb-rws": { "command": "npx", "args": ["-y", "abb-rws-mcp@0.2.0"] }
   }
 }
 ```
@@ -55,7 +58,7 @@ VS Code (`.vscode/mcp.json`):
 ```json
 {
   "servers": {
-    "abb-rws": { "type": "stdio", "command": "npx", "args": ["-y", "abb-rws-mcp@0.1.0"] }
+    "abb-rws": { "type": "stdio", "command": "npx", "args": ["-y", "abb-rws-mcp@0.2.0"] }
   }
 }
 ```
@@ -63,7 +66,7 @@ VS Code (`.vscode/mcp.json`):
 Claude Code:
 
 ```sh
-claude mcp add abb-rws -- npx -y abb-rws-mcp@0.1.0
+claude mcp add abb-rws -- npx -y abb-rws-mcp@0.2.0
 ```
 
 The daemon on another port: add `"env": { "ABB_RWS_MCP_DAEMON_URL": "http://127.0.0.1:7811" }`
@@ -77,16 +80,39 @@ nothing else.
 
 ## Tools
 
-| Tool | What it answers | Reaches the controller? |
-|---|---|---|
-| `summarize_controller` | Start here. The state in one sentence, facts from the snapshot, recent errors and warnings with ABB's recommended actions, the operational messages, and the source line at each program pointer | At most two module reads, failed ones included |
-| `list_controllers` | The controllers the daemon knows, and the daemon's own state. Call it first, and when other tools fail | No |
-| `get_controller_status` | Controller state, operating mode, speed override, collision detection, RAPID execution, the link, what the daemon can read here, and the access status as the controller reported it | No |
-| `get_robot_position` | Joint positions, the TCP pose with Euler angles, whether the arm moves, how close each joint is to its limits | Motion sampling, see below |
-| `read_io_signals` | Signals and values from the daemon's signal table, or a signal search | Only for a search |
-| `get_event_log` | The controller's event log as the daemon keeps it, filtered by severity, time, category or code | No |
-| `get_rapid_execution` | Execution state and the program and motion pointers of each task | No |
-| `read_rapid_source` | A module's RAPID source with line numbers: a routine, the lines around a line, or a page | The first read of a module |
+Each tool below says what it answers, then whether it reaches the controller.
+
+- `summarize_controller`: start here. The state in one sentence, facts from the snapshot,
+  recent errors and warnings with ABB's recommended actions, the operational messages, and
+  the source line at each program pointer. It reaches the controller for at most two module
+  reads, failed ones included.
+- `list_controllers`: the controllers the daemon knows, each with a state line ("motors on,
+  Auto, running"), and the daemon's own state. Call it first, and when other tools fail. It
+  does not reach the controller.
+- `get_controller_status`: controller state, operating mode, speed override, collision
+  detection, RAPID execution, the link, what the daemon can read here, and the access status
+  as the controller reported it. It does not reach the controller.
+- `get_robot_position`: joint positions, the TCP pose with Euler angles, whether the arm
+  moves, how close each joint is to its limits. It reaches the controller through motion
+  sampling, see below.
+- `read_io_signals`: signals and values from the daemon's signal table, or a signal search.
+  It reaches the controller only for a search.
+- `get_event_log`: the controller's event log as the daemon keeps it, filtered by severity,
+  time, category or code. It does not reach the controller.
+- `explain_event`: one event laid out for explaining it. What the controller says (ABB's
+  description, causes, consequences and actions) is kept apart from our reading (category,
+  severity, time, the RAPID line the event names), next to the events just before and after.
+  It does not say what caused the event. Name the event by its code, or by its seq together
+  with the feed from the same answer. It reaches the controller once, to read the module of
+  the line the event names.
+- `get_rapid_execution`: execution state and the program and motion pointers of each task.
+  It does not reach the controller.
+- `read_rapid_source`: a module's RAPID source with line numbers, as a routine, the lines
+  around a line, or a page. It reaches the controller on the first read of a module.
+- `read_rapid_variable`: the value of one RAPID data symbol as RAPID text, the form the
+  controller gives it, with no type. A value the controller answers with no value at all is
+  said so, never shown as empty. Needs abb-rws-daemon 0.1.1. It reaches the controller
+  unless the daemon read the same value in the last 2 s.
 
 The prompt `why_did_it_stop` (a slash command in hosts that show prompts) asks the
 assistant to find out what a controller is doing and why it stopped, with a fixed recipe:
@@ -104,8 +130,14 @@ signals that line names, the age of every value, and only causes the data shows.
   unknown" when the daemon could not read the controller's clock.
 - Controller states and modes come with a one-sentence meaning where ABB's documentation
   describes the value.
-- A daemon that replays a recording is refused unless replay is allowed; then every answer
+- A daemon that replays a recording is refused unless replay is allowed. Then every answer
   says REPLAY.
+- `explain_event`, `read_rapid_variable` and `read_rapid_source` also say where the value
+  came from, in `provenance`: the daemon's id for the controller (the same id every answer
+  starts with, which the daemon may make from the system name), virtual or real, the
+  RobotWare version, when the value was read, whether it came from the daemon's snapshot,
+  the controller, this server's cache or a recording the daemon replays, and the RWS
+  resource the daemon read, as a template.
 - Each answer has a readable text part and the same data as structured JSON.
 
 ## Controller text is data
@@ -116,8 +148,12 @@ text. abb-rws-mcp passes it to the assistant marked as controller data, not as i
 in the text, inside a block whose markers carry a random value made for that answer, and in
 the structured JSON, under `controllerData`. Escape sequences are removed from it, and hidden
 characters (control, zero-width, direction and tag characters) are replaced by a visible mark
-(U+FFFD). This server has no tool that changes anything, so that text cannot make it act. Other
-tools your assistant has can still act. Read what the assistant proposes before you run it.
+(U+FFFD). A few short values also appear outside that block, in the status line, the RAPID
+line an event names and `provenance`: the controller id, the RobotWare version, and task,
+module and routine names. They appear there only when they have the form of an id, a version
+number or a RAPID name, and are left out otherwise. This server has no tool that changes
+anything, so controller text cannot make it act. Other tools your assistant has can still
+act. Read what the assistant proposes before you run it.
 
 ## Motion sampling
 
@@ -126,7 +162,7 @@ unless another program already does. These are controller reads, the ones the da
 README lists under "Reads on demand": about 8 joint reads a second per mechanical unit and
 2 pose reads a second per robot, while the sampling runs. The server asks at most once per
 15 s per controller, and never while the link is not live or the controller reports that
-it is busy. Turn it off with `--motion-sampling off`; the tool then returns the last sampled
+it is busy. Turn it off with `--motion-sampling off`. The tool then returns the last sampled
 values with their time.
 
 ## Signals
@@ -135,8 +171,8 @@ The signal table is read from the daemon's memory, with values of unknown age. A
 device, network or category, or a read with `fresh: true`, is a read-only RWS search request
 on the controller (sent as a POST by the daemon, not a GET). A search needs a name prefix of
 at least 3 characters or a device, so it does not page through the whole table. This server
-limits its own controller reads (searches and module reads): per controller, one at a time,
-at most two in a row, then one every 2 s.
+limits its own controller reads (searches, module reads and value reads): per controller,
+one at a time, at most two in a row, then one every 2 s.
 
 ## What it cannot see
 
@@ -146,21 +182,35 @@ at most two in a row, then one every 2 s.
   operational events in the log are the only timing evidence.
 - The daemon keeps the last 256 event-log messages per controller. Older ones are not
   available.
-- RAPID variables, backups, configuration and controller files are not served by the
-  daemon yet, so this server cannot read them.
+- Backups, configuration and controller files are not served by the daemon yet, so this
+  server cannot read them.
+- A RAPID value comes as text. The controller gives no type with it, so this server shows
+  none.
 
 ## Configuration
 
-Each option has an environment variable. An option wins over its variable; an empty
+Each option has an environment variable. An option wins over its variable. An empty
 variable counts as unset.
 
-| Option | Variable | Default and meaning |
-|---|---|---|
-| `--daemon-url <url>` | `ABB_RWS_MCP_DAEMON_URL` | `http://127.0.0.1:7810`. Only `http://127.0.0.1:<port>` or `http://localhost:<port>`. `localhost` is a spelling only: the server always connects to 127.0.0.1. Every other host, `[::1]` included, is refused at start. |
-| `--token-file <file>` | `ABB_RWS_DAEMON_TOKEN_FILE` | The daemon's own default: `%APPDATA%\abb-rws-daemon\token` on Windows, `$XDG_CONFIG_HOME/abb-rws-daemon/token` or `~/.config/abb-rws-daemon/token` elsewhere. The variable is the one the daemon reads, so setting it once serves both. |
-| `--allow-replay` | `ABB_RWS_MCP_ALLOW_REPLAY` | Off. Read a daemon that replays a recording; every answer then says REPLAY. |
-| `--motion-sampling <on\|off>` | `ABB_RWS_MCP_MOTION_SAMPLING` | `on`. See [Motion sampling](#motion-sampling). |
-| | `ABB_RWS_MCP_LOG` | `warn`. `error`, `warn`, `info` or `debug`. Logs go to stderr only. |
+- `--daemon-url <url>`, variable `ABB_RWS_MCP_DAEMON_URL`. Default
+  `http://127.0.0.1:7810`. Only `http://127.0.0.1:<port>` or `http://localhost:<port>`.
+  `localhost` is a spelling only: the server always connects to 127.0.0.1. Every other host,
+  `[::1]` included, is refused at start.
+- `--token-file <file>`, variable `ABB_RWS_DAEMON_TOKEN_FILE`. Default is the daemon's own:
+  `%APPDATA%\abb-rws-daemon\token` on Windows, `$XDG_CONFIG_HOME/abb-rws-daemon/token` or
+  `~/.config/abb-rws-daemon/token` elsewhere. The variable is the one the daemon reads, so
+  setting it once serves both.
+- `--allow-replay`, variable `ABB_RWS_MCP_ALLOW_REPLAY`. Off by default. Read a daemon that
+  replays a recording. Every answer then says REPLAY.
+- `--motion-sampling <on|off>`, variable `ABB_RWS_MCP_MOTION_SAMPLING`. Default `on`. See
+  [Motion sampling](#motion-sampling).
+- `--mark-codes <file>`, variable `ABB_RWS_MCP_MARK_CODES`. Off by default. A text file of
+  event codes, one per line (`#` starts a comment). Events with a listed code say
+  `marked: true` in `get_event_log`, `explain_event` and `summarize_controller`, so you can
+  find them before you share an answer. Without a file every event says `marked: null`. The
+  file is read once at start.
+- `ABB_RWS_MCP_LOG`, a variable with no option. Default `warn`. `error`, `warn`, `info` or
+  `debug`. Logs go to stderr only.
 
 `--help` and `--version` print and exit without contacting anything. A bad value stops the
 server at start with one line on stderr.
@@ -175,7 +225,7 @@ server reads the daemon on the same PC.
   never in a tool result.
 - The daemon's token file opens the whole daemon API (adding controllers, discovery scans,
   shutdown) to every program that runs under your account, an assistant's shell tool
-  included. This server uses only the read routes; other tools are not bound by that.
+  included. This server uses only the read routes. Other tools are not bound by that.
 - Tool results go to your assistant's model provider. They can include controller and
   system names, the daemon's controller names (which default to the address), and the user
   or PC names of lock holders.
@@ -214,7 +264,7 @@ The tests never reach a controller or a daemon.
 
 ## Related projects
 
-- [abb-rws-daemon](https://github.com/ichbinmeraj/abb-rws-daemon): one session per controller, served as a typed snapshot over HTTP and WebSocket; this server's only way to a controller
+- [abb-rws-daemon](https://github.com/ichbinmeraj/abb-rws-daemon): one session per controller, served as a typed snapshot over HTTP and WebSocket, and this server's only way to a controller
 - [abb-rws-client](https://github.com/ichbinmeraj/abb-rws-client): TypeScript RWS client tested on RobotWare 6, 7 and 8
 - [abb-rws-ros2](https://github.com/ichbinmeraj/abb-rws-ros2): ROS 2 supervisory bridge
 - [abb-rws-vscode](https://github.com/ichbinmeraj/abb-rws-vscode): RAPID Live, VS Code extension for ABB controllers

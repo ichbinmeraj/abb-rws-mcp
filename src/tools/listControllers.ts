@@ -45,6 +45,7 @@ const ControllerOut = z.object({
   capabilities: z.object({ tested: z.boolean().nullable() }),
   panel: z.object({ ctrlState: z.string().nullable(), opMode: z.string().nullable() }),
   rapid: z.object({ execState: z.string().nullable() }),
+  state: z.string().nullable(),
   controllerData: z.object({
     name: z.string(),
     controllerName: z.string().nullable(),
@@ -71,6 +72,26 @@ export const OUTPUT = z.object({
 type Out = z.infer<typeof OUTPUT>;
 
 const VERSION_PATTERN = /^[0-9A-Za-z.+-]{1,40}$/;
+
+const CTRL_WORDS: Record<string, string> = {
+  init: 'starting up', motoroff: 'motors off', motoron: 'motors on', guardstop: 'guard stop',
+  emergencystop: 'emergency stop', emergencystopreset: 'emergency stop reset', sysfail: 'system failure',
+};
+const MODE_WORDS: Record<string, string> = { AUTO: 'Auto', MANR: 'manual reduced speed', MANF: 'manual full speed' };
+const EXEC_WORDS: Record<string, string> = { running: 'running', stopped: 'stopped' };
+
+/**
+ * One line per controller from the list answer alone: controller state,
+ * operating mode, program state ("motors on, Auto, running"). A value that is
+ * not known says so. It reads no lock, holder or access field.
+ */
+export function stateLine(ctrlState: string | null, opMode: string | null, execState: string | null): string {
+  return [
+    ctrlState !== null ? CTRL_WORDS[ctrlState] ?? 'controller state not known' : 'controller state not known',
+    opMode !== null ? MODE_WORDS[opMode] ?? 'mode not known' : 'mode not known',
+    execState !== null ? EXEC_WORDS[execState] ?? 'program state not known' : 'program state not known',
+  ].join(', ');
+}
 
 function daemonOut(health: Health | null, port: number, now: number): Out['daemon'] {
   if (!health) {
@@ -184,6 +205,8 @@ export async function listControllers(ctx: Context): Promise<ReturnType<typeof o
       capabilities: { tested: s.capabilities.tested },
       panel: { ctrlState: wrong ? null : knownValue(CTRL_STATE, s.panel.ctrlState), opMode: wrong ? null : knownValue(OP_MODE, s.panel.opMode) },
       rapid: { execState: wrong ? null : knownValue(EXEC_STATE, s.rapid.execState) },
+      // A state that is not current says so in the field itself, not only in freshness.
+      state: wrong ? null : `${level === 'current' ? '' : 'last known: '}${stateLine(knownValue(CTRL_STATE, s.panel.ctrlState), knownValue(OP_MODE, s.panel.opMode), knownValue(EXEC_STATE, s.rapid.execState))}`,
       controllerData: cleanDeep({
         name: s.name,
         controllerName: wrong ? null : s.identity?.controllerName ?? null,
@@ -199,9 +222,7 @@ export async function listControllers(ctx: Context): Promise<ReturnType<typeof o
       : [
         mode === 'replay' ? 'REPLAY' : `link ${quality}`,
         level === 'current' ? 'current' : level.toUpperCase(),
-        c.panel.ctrlState ? `controller state ${c.panel.ctrlState}` : 'controller state not known',
-        c.panel.opMode ? `mode ${c.panel.opMode}` : 'mode not known',
-        c.rapid.execState ? `program ${c.rapid.execState}` : 'program state not known',
+        c.state ?? 'state not known',
       ].join(', ');
     ctrlLines.push(`- ${who(s)}: ${state}.`);
     data.push({ id: s.id, ...c.controllerData });

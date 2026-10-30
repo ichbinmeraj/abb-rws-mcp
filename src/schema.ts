@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { errors } from './errors.js';
 
 /**
- * The daemon's answers (schema 0.13 and 0.14), as far as this server reads them.
+ * The daemon's answers (schema 0.13 to 0.15), as far as this server reads them.
  * Unknown fields are dropped; enum fields are read as text and checked against
  * the known values where they are used, so a later 0.x with a new value is
  * still read ("not a known value"). `link.host` and `link.port` are never read.
@@ -193,6 +193,12 @@ export type SignalList = z.infer<typeof SignalList>;
 
 export const ModuleSource = z.object({ task: str, module: str, kind: nstr, text: str, changeCount: nnum });
 export type ModuleSource = z.infer<typeof ModuleSource>;
+
+/** `GET .../symbols/:symbol` (schema 0.15): the value as the controller's RAPID text, never empty. */
+export const RapidSymbolValue = z.object({
+  task: str, module: str, symbol: str, value: str, truncated: z.boolean(), resource: str, readAt: str,
+});
+export type RapidSymbolValue = z.infer<typeof RapidSymbolValue>;
 
 export const MotionWatchAnswer = z.object({ leaseMs: z.number(), targetHz: z.number(), leaseId: str.optional() });
 export type MotionWatchAnswer = z.infer<typeof MotionWatchAnswer>;

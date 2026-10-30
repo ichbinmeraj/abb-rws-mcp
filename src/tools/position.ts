@@ -6,7 +6,7 @@ import { eulerZyxFromQuaternion } from '../euler.js';
 import { ageS, parseTime, validTime, when } from '../render.js';
 import { MotionWatchAnswer, type Motion, type Snapshot } from '../schema.js';
 import {
-  ANNOTATIONS, DESCRIPTION_TAIL, blockOf, commonShape, controllerInput, dataText, header, ok, reasons, refreshed, scoped, type Scoped,
+  ANNOTATIONS, DESCRIPTION_TAIL, blockOf, commonShape, controllerInput, dataText, generationOf, header, ok, reasons, refreshed, scoped, type Scoped,
 } from './common.js';
 
 export const NAME = 'get_robot_position';
@@ -27,7 +27,10 @@ const POLL_MS = 250;
 // The daemon samples an RWS 1.0 controller at under 1 Hz (0.8 Hz seen on RobotWare 6.16), and its
 // first sample after a new lease came about 3.5 s after the request. Wait long enough for that,
 // and for a second sample at that rate, so a slow controller answers on the first call too.
-const FIRST_SAMPLE_MS = 6_000;
+// On RWS 1.0 the first sample took 4.2 to 4.5 s on a RobotWare 6.16 virtual controller and ran
+// over 6 s once while two other controllers were read, so RWS 1.0 gets 10 s.
+export const FIRST_SAMPLE_MS = 6_000;
+export const FIRST_SAMPLE_RWS1_MS = 10_000;
 const SECOND_SAMPLE_MS = 2_000;
 /** A joint change larger than this (deg or mm) between two samples counts as moving. */
 export const MOVING_THRESHOLD = 0.01;
@@ -162,6 +165,7 @@ export async function getRobotPosition(ctx: Context, args: { controller?: string
   const mine = book.perController.get(s.id) ?? { lastRequestAt: -Infinity, expiresAt: -Infinity, postedAt: -Infinity, inflight: null };
   book.perController.set(s.id, mine);
   if (mine.expiresAt > ctx.now()) { sampledBy = 'this-server'; }
+  const firstWaitMs = generationOf(snap) === 'rws1' ? FIRST_SAMPLE_RWS1_MS : FIRST_SAMPLE_MS;
   let first: Sample | null = sampleOf(snap);
   let second: Sample | null = null;
 
@@ -171,7 +175,7 @@ export async function getRobotPosition(ctx: Context, args: { controller?: string
       // Another call is asking already: join it.
       const outcome = await mine.inflight;
       if (outcome.kind === 'granted') { samplingRequested = true; sampledBy = 'this-server'; }
-      const got = await waitForSample(ctx, s, outcome.kind === 'granted' ? outcome.postedAt : (first?.at ?? 0), FIRST_SAMPLE_MS);
+      const got = await waitForSample(ctx, s, outcome.kind === 'granted' ? outcome.postedAt : (first?.at ?? 0), firstWaitMs);
       if (got) { snap = got; first = sampleOf(got); }
     } else if (snap.motion.watching) {
       // Someone samples already (another consumer, or this server's lease still runs): no request, wait for newer samples.
@@ -192,7 +196,7 @@ export async function getRobotPosition(ctx: Context, args: { controller?: string
         sampledBy = 'this-server';
         mine.postedAt = outcome.postedAt;
         mine.expiresAt = outcome.postedAt + LEASE_MS;
-        const got = await waitForSample(ctx, s, outcome.postedAt, FIRST_SAMPLE_MS);
+        const got = await waitForSample(ctx, s, outcome.postedAt, firstWaitMs);
         if (got) {
           snap = got;
           first = sampleOf(got);

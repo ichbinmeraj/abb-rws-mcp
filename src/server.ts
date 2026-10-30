@@ -6,21 +6,24 @@ import { PROMPT_DESCRIPTION, PROMPT_NAME, promptText } from './prompt.js';
 import { SERVER_NAME, SERVER_VERSION } from './version.js';
 import { wrap } from './tools/common.js';
 import * as events from './tools/eventLog.js';
+import * as explain from './tools/explainEvent.js';
 import * as io from './tools/ioSignals.js';
 import * as list from './tools/listControllers.js';
 import * as position from './tools/position.js';
 import * as execution from './tools/rapidExecution.js';
 import * as source from './tools/rapidSource.js';
+import * as variable from './tools/rapidVariable.js';
 import * as status from './tools/status.js';
 import * as summarize from './tools/summarize.js';
 
 /** The tool names, in the order they are listed. Every one reads; none writes. */
 export const TOOL_NAMES = [
-  summarize.NAME, list.NAME, status.NAME, position.NAME, io.NAME, events.NAME, execution.NAME, source.NAME,
+  summarize.NAME, list.NAME, status.NAME, position.NAME, io.NAME, events.NAME, explain.NAME, execution.NAME, source.NAME,
+  variable.NAME,
 ] as const;
 
 /**
- * The MCP server: 8 read-only tools and 1 prompt. It declares no logging
+ * The MCP server: 10 read-only tools and 1 prompt. It declares no logging
  * capability and no resources; the instructions and descriptions are fixed text.
  */
 export function createServer(ctx: Context): McpServer {
@@ -56,6 +59,11 @@ export function createServer(ctx: Context): McpServer {
     inputSchema: events.INPUT, outputSchema: events.OUTPUT, annotations: events.annotations,
   }, wrap(ctx, events.NAME, events.OUTPUT, args => events.getEventLog(ctx, args)));
 
+  server.registerTool(explain.NAME, {
+    title: 'Explain an event', description: explain.DESCRIPTION,
+    inputSchema: explain.INPUT, outputSchema: explain.OUTPUT, annotations: explain.annotations,
+  }, wrap(ctx, explain.NAME, explain.OUTPUT, args => explain.explainEvent(ctx, args)));
+
   server.registerTool(execution.NAME, {
     title: 'RAPID execution', description: execution.DESCRIPTION,
     inputSchema: execution.INPUT, outputSchema: execution.OUTPUT, annotations: execution.annotations,
@@ -65,6 +73,11 @@ export function createServer(ctx: Context): McpServer {
     title: 'Read RAPID source', description: source.DESCRIPTION,
     inputSchema: source.INPUT, outputSchema: source.OUTPUT, annotations: source.annotations,
   }, wrap(ctx, source.NAME, source.OUTPUT, args => source.readRapidSource(ctx, args)));
+
+  server.registerTool(variable.NAME, {
+    title: 'Read a RAPID variable', description: variable.DESCRIPTION,
+    inputSchema: variable.INPUT, outputSchema: variable.OUTPUT, annotations: variable.annotations,
+  }, wrap(ctx, variable.NAME, variable.OUTPUT, args => variable.readRapidVariable(ctx, args)));
 
   server.registerPrompt(PROMPT_NAME, {
     title: 'Why did it stop?',

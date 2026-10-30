@@ -18,7 +18,8 @@ const CLI = fileURLToPath(new URL('../dist/cli.js', import.meta.url));
 
 const TOOLS = [
   'summarize_controller', 'list_controllers', 'get_controller_status', 'get_robot_position',
-  'read_io_signals', 'get_event_log', 'get_rapid_execution', 'read_rapid_source',
+  'read_io_signals', 'get_event_log', 'explain_event', 'get_rapid_execution', 'read_rapid_source',
+  'read_rapid_variable',
 ];
 const CALLS: [string, Record<string, unknown>][] = [
   ['summarize_controller', {}],
@@ -29,6 +30,8 @@ const CALLS: [string, Record<string, unknown>][] = [
   ['get_event_log', { minSeverity: 'info', detail: 'full' }],
   ['get_rapid_execution', {}],
   ['read_rapid_source', { task: 'T_ROB1', module: 'MainModule', aroundLine: 9 }],
+  ['explain_event', { code: 41000 }],
+  ['read_rapid_variable', { task: 'T_ROB1', module: 'MainModule', symbol: 'nParts' }],
 ];
 const WRITE_WORDS = /\b(set|sets|write|writes|start|starts|stop|stops|restart|move|moves|jog|load|loads|save|saves|delete|deletes|remove|removes|add|adds|create|creates|update|updates|reset|resets|enable|disable|shutdown|shut down|release|change|changes|modify|edit|command)\b/i;
 
@@ -41,6 +44,7 @@ beforeAll(async () => {
   const cell = stoppedCell();
   fake.add(cell.snap, cell.events, signalTable());
   fake.modules.set('cell-1/T_ROB1/MainModule', MAIN_MODULE);
+  fake.values.set('cell-1/T_ROB1/MainModule/nParts', '12');
   fake.onLease = id => { if (!fake.controllers.get(id).motion.watching) { sampleOnRead(fake, id, 0.25); } };
   dir = tempDir();
   tokenFile = join(dir, 'token');
@@ -60,7 +64,7 @@ const env = (extra: Record<string, string> = {}): Record<string, string> => ({
 });
 
 describe('the bundled server over stdio', () => {
-  it('lists 8 read-only tools and 1 prompt, answers every call, and sends only read requests', async () => {
+  it('lists 10 read-only tools and 1 prompt, answers every call, and sends only read requests', async () => {
     fake.log = [];
     const transport = new StdioClientTransport({ command: process.execPath, args: [CLI], env: env(), stderr: 'pipe' });
     let stderr = '';
@@ -68,7 +72,7 @@ describe('the bundled server over stdio', () => {
     const client = new Client({ name: 'protocol-test', version: '0' });
     await client.connect(transport);
 
-    expect(client.getServerVersion()).toMatchObject({ name: 'abb-rws-mcp', version: '0.1.0' });
+    expect(client.getServerVersion()).toMatchObject({ name: 'abb-rws-mcp', version: '0.2.0' });
     expect(client.getServerCapabilities()?.logging).toBeUndefined();
     expect(client.getServerCapabilities()?.resources).toBeUndefined();
     const instructions = client.getInstructions() ?? '';
@@ -78,7 +82,7 @@ describe('the bundled server over stdio', () => {
     const { tools } = await client.listTools();
     expect(tools.map(t => t.name)).toEqual(TOOLS);
     for (const t of tools) {
-      expect(t.name).toMatch(/^(get|list|read|summarize)_[a-z_]+$/);
+      expect(t.name).toMatch(/^(get|list|read|summarize|explain)_[a-z_]+$/);
       expect(t.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
       expect(t.outputSchema).toBeDefined();
       const d = t.description ?? '';
@@ -97,6 +101,9 @@ describe('the bundled server over stdio', () => {
 
     const results: CallToolResult[] = [];
     for (const [name, args] of CALLS) {
+      // This server's own limit: two reads that reach the controller, then one every 2 s.
+      // The summary's module read and the signal search have taken both by now.
+      if (name === 'read_rapid_variable') { await new Promise(r => setTimeout(r, 2_100)); }
       const r = await client.callTool({ name, arguments: args }) as CallToolResult;
       expect(r.isError, `${name}: ${JSON.stringify(r.content)}`).toBeFalsy();
       expect(r.structuredContent).toBeDefined();
@@ -203,7 +210,7 @@ describe('the bundled server over stdio', () => {
     fake.log = [];
     const v = spawnSync(process.execPath, [CLI, '--version'], { env: env(), encoding: 'utf8' });
     expect(v.status).toBe(0);
-    expect(v.stdout).toMatch(/^abb-rws-mcp 0\.1\.0\ndaemon schema: 0\.13 to 0\.14 tested, later 0\.x accepted\nMCP SDK: 1\.32\.1\nNode\.js: /);
+    expect(v.stdout).toMatch(/^abb-rws-mcp 0\.2\.0\ndaemon schema: 0\.13 to 0\.15 tested, later 0\.x accepted\nMCP SDK: 1\.32\.1\nNode\.js: /);
     const h = spawnSync(process.execPath, [CLI, '--help'], { env: env(), encoding: 'utf8' });
     expect(h.status).toBe(0);
     expect(h.stdout).toContain('Usage: abb-rws-mcp [options]');
